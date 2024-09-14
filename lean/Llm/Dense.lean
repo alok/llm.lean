@@ -2,27 +2,38 @@ import LinearAlgebra.Vector
 import Llm.Matmul
 import Llm.Softmax
 
+/-- This is necessary to avoid lotsa headaches.-/
+local instance : Hashable Float where
+  hash x :=  x.toUInt64
+
 /-- A dense layer. I corresponds to the rows of a matrix, O to the columns.-/
 structure Dense (I O: ℕ) where
-  /--weights -/
-  W : Vector O (Vector I Float)
-  /--bias-/
-  b : Vector O Float
+  /--weights, default is all zeros -/
+  W : Vector O (Vector I Float) := 0
+  /--bias, default is all ones-/
+  b : Vector O Float := 1
+deriving Hashable, Inhabited
+
+instance : Repr (Dense I O) where
+  reprPrec self _ := s!"Weight: {self.W}\nBias: {self.b}"
+
+instance : ToString (Dense I O) where
+  toString self := s!"{repr self}"
 
 
--- fwd
+def Dense.forward_unbatched (self : Dense I O) (xs: Vector I Float) : Vector O Float :=
+  (self.W * xs) + self.b
+
+#eval {:Dense 1 3}.forward_unbatched !v[3]
+-- instance : CoeFun (Dense I O) (fun _ => Vector I Float -> Vector O Float) where
+--   coe f := f.forward_unbatched
+
 -- TODO(alok): ask cursor composer to define matrix abbrev and use that so we stop messing up matrix dim order
 
-def Dense.forward (self :Dense I O) (xs: Vector B (Vector I Float)) : Vector B (Vector O Float) :=
 
-  let batched_out := xs.map (fun x =>
-    let x' := x.singleton.transpose
-    let b' := self.b.singleton.transpose
-    -- W has shape O x I, x' has shape I x 1, and W x' has shape O x 1
-    let out  := (self.W * x') + b'
-    out.transpose[0]
-  )
-  batched_out
+
+def Dense.forward (self : Dense I O) (xs: Vector B (Vector I Float)) : Vector B (Vector O Float) :=
+  xs.map self.forward_unbatched
 
 
 def Dense.backward

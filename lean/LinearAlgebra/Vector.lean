@@ -1,11 +1,16 @@
 import Mathlib.Algebra.Group.ZeroOne
-/-- The base array type.-/
+/-- The base linear algebra data type. It carries its index in the front for easier shape reading.-/
 structure Vector (n: Nat) (α : Type u)  where
   /-- Underlying data-/
   data: Array α
   /-- a proof that the data.length = n -/
   isEq: data.size = n := by rfl
-deriving Repr, Hashable
+deriving Hashable
+
+
+
+instance [Repr α] : Repr (Vector n α) where
+  reprPrec self _ := s!"{repr self.data}"
 
 instance [Repr α] : ToString (Vector n α) where
   toString v := s!"{repr v}"
@@ -28,6 +33,10 @@ def replicate (n: Nat) (x: α) : Vector n α := {
     isEq := Array.size_mkArray n x
 }
 
+
+instance [Inhabited α] : Inhabited (Vector n α) where
+  default := replicate n default
+
 @[inline]
 def of (a: α) : Vector n α :=
   replicate n a
@@ -49,9 +58,10 @@ def ofList (l : List α) : Vector l.length α  := {
   isEq := Array.size_mk l
 }
 
-syntax "!v[" withoutPosition(sepBy(term, ", ")) "]" : term
+syntax "!v[" withoutPosition(sepBy(term, ",", ", ", allowTrailingSep)) "]" : term
 macro_rules
-  | `(!v[ $elems,* ]) => `(Vector.ofList [ $elems,* ])
+  | `(!v[$elems,*]) => `(Vector.ofList [ $elems,* ])
+
 
 @[inline]
 def singleton (x:α) : Vector 1 α  :=
@@ -431,14 +441,23 @@ instance [Sub α] {n: Nat} : Sub (Vector n α) where sub := sub
 
 
 /--scalar mul-/
-instance [Mul α] {n: Nat} : HMul α (Vector n α) (Vector n α) where
+instance [HMul scalar α α] : HMul scalar (Vector n α) (Vector n α) where
   hMul a v := v.map (a * ·)
 /-- scalar mul from the right is the same as scalar mul from the left-/
-instance [Mul α] {n: Nat} : HMul (Vector n α) α (Vector n α) where
-  hMul v a := a * v
+instance [HMul α scalar α] : HMul (Vector n α) scalar (Vector n α) where
+  hMul v a := v.map (· * a)
 /-- scalar div -/
-instance [Div α] {n: Nat} : HDiv (Vector n α) α (Vector n α) where
+instance [HDiv α scalar α] : HDiv (Vector n α) scalar (Vector n α) where
   hDiv v a := v.map (· / a)
+#eval !v[1, 2, 3.] / 2.0
+
+/-- type sig of this one may be ugly in full generality with more than one axis-/
+def squeeze (self: Vector n (Vector 1 Float)) : Vector n Float :=
+  self.map (·[0])
+
+
+def unsqueeze (v: Vector n α) : Vector n (Vector 1 α) :=
+  v.map Vector.singleton
 
 /-- Matrix-vector multiplication -/
 instance [Add α] [Mul α] [Zero α] {R C: Nat} : HMul (Vector R (Vector C α)) (Vector C α) (Vector R α) where
@@ -482,7 +501,7 @@ def split {α : Type u} {R C : Nat} (tosplit: Vector (R * C) α) : Vector R (Vec
         tosplit[r * C + c]'sorry
 
 
-#eval do
+#eval! do
   -- Test case for stack
   let v1 := !v[1, 2]
   let v2 := !v[3, 4]
